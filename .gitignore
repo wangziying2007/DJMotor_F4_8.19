@@ -1,0 +1,11 @@
+*.o
+*.hex
+*.axf
+*.map
+*.dep
+*.uvgui
+*.uvgui.*
+*.uvoptx
+*.uvprojx
+*.o.d
+MDK-ARM/
