@@ -41,7 +41,7 @@ extern "C"
     } PIDType;
 
     void PID_Reset(PIDType *pid);     // 把所有误差清零
-    float PID_Caculate(PIDType *pid); // 算出误差，根据上次的误差算出这次油门应该增加多少（增量）
+    float PID_Calculate(PIDType *pid); // 算出误差，根据上次的误差算出这次油门应该增加多少（增量）
 
 #ifdef __cplusplus
 }

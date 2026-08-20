@@ -1,21 +1,21 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file    can.c
-  * @brief   This file provides code for the configuration
-  *          of the CAN instances.
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file    can.c
+ * @brief   This file provides code for the configuration
+ *          of the CAN instances.
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2026 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "can.h"
@@ -58,33 +58,40 @@ void MX_CAN1_Init(void)
   /* 配置 CAN1 接收过滤器：放行 DJI 电机反馈帧（标准帧 ID 0x200~0x208）
      F4 上若不使能过滤器，CAN 默认是收不到任何消息的 */
   CAN_FilterTypeDef sFilterConfig = {0};
-  sFilterConfig.FilterIdHigh      = (uint32_t)(0x200U << 5);  /* 标准帧 ID 需左移 5 位到 [28:18] 位 */
-  sFilterConfig.FilterIdLow       = 0x0000U;
-  sFilterConfig.FilterMaskIdHigh  = (uint32_t)(0x7FFU << 5);  /* 掩码全部匹配，放行 0x200 起始的 11 位 ID */
-  sFilterConfig.FilterMaskIdLow   = 0x0000U;
-  sFilterConfig.FilterMode        = CAN_FILTERMODE_IDMASK;   /* 掩码模式 */
-  sFilterConfig.FilterScale       = CAN_FILTERSCALE_32BIT;   /* 32 位单过滤器 */
-  sFilterConfig.FilterFIFOAssignment = CAN_FILTER_FIFO0;     /* 分配到 FIFO0，对应接收中断 */
-  sFilterConfig.FilterBank        = 0U;                      /* 使用 FilterBank 0 */
-  sFilterConfig.FilterActivation  = CAN_FILTER_ENABLE;
+  sFilterConfig.FilterIdHigh = 0u; /* 标准帧 ID 需左移 5 位到 [28:18] 位 */
+  sFilterConfig.FilterIdLow = 0x0000U;
+  sFilterConfig.FilterMaskIdHigh = 0u; /* 掩码全部匹配，放行 0x200 起始的 11 位 ID */
+  sFilterConfig.FilterMaskIdLow = 0x0000U;
+  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;      /* 掩码模式 */
+  sFilterConfig.FilterScale = CAN_FILTERSCALE_16BIT;     /* 16 位单过滤器 */
+  sFilterConfig.FilterFIFOAssignment = CAN_FILTER_FIFO0; /* 分配到 FIFO0，对应接收中断 */
+  sFilterConfig.FilterBank = 0U;                         /* 使用 FilterBank 0 */
+  sFilterConfig.FilterActivation = CAN_FILTER_ENABLE;
   if (HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
   {
     Error_Handler();
   }
 
+  if (HAL_CAN_Start(&hcan1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_CAN_ActivateNotification(&hcan1,  CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE END CAN1_Init 2 */
-
 }
 
-void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
+void HAL_CAN_MspInit(CAN_HandleTypeDef *canHandle)
 {
 
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  if(canHandle->Instance==CAN1)
+  if (canHandle->Instance == CAN1)
   {
-  /* USER CODE BEGIN CAN1_MspInit 0 */
+    /* USER CODE BEGIN CAN1_MspInit 0 */
 
-  /* USER CODE END CAN1_MspInit 0 */
+    /* USER CODE END CAN1_MspInit 0 */
     /* CAN1 clock enable */
     __HAL_RCC_CAN1_CLK_ENABLE();
 
@@ -93,7 +100,7 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
     PA11     ------> CAN1_RX
     PA12     ------> CAN1_TX
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12;
+    GPIO_InitStruct.Pin = GPIO_PIN_11 | GPIO_PIN_12;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
@@ -105,20 +112,20 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
     HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
     HAL_NVIC_SetPriority(CAN1_RX1_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(CAN1_RX1_IRQn);
-  /* USER CODE BEGIN CAN1_MspInit 1 */
+    /* USER CODE BEGIN CAN1_MspInit 1 */
 
-  /* USER CODE END CAN1_MspInit 1 */
+    /* USER CODE END CAN1_MspInit 1 */
   }
 }
 
-void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
+void HAL_CAN_MspDeInit(CAN_HandleTypeDef *canHandle)
 {
 
-  if(canHandle->Instance==CAN1)
+  if (canHandle->Instance == CAN1)
   {
-  /* USER CODE BEGIN CAN1_MspDeInit 0 */
+    /* USER CODE BEGIN CAN1_MspDeInit 0 */
 
-  /* USER CODE END CAN1_MspDeInit 0 */
+    /* USER CODE END CAN1_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_CAN1_CLK_DISABLE();
 
@@ -126,18 +133,17 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
     PA11     ------> CAN1_RX
     PA12     ------> CAN1_TX
     */
-    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_11|GPIO_PIN_12);
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_11 | GPIO_PIN_12);
 
     /* CAN1 interrupt Deinit */
     HAL_NVIC_DisableIRQ(CAN1_RX0_IRQn);
     HAL_NVIC_DisableIRQ(CAN1_RX1_IRQn);
-  /* USER CODE BEGIN CAN1_MspDeInit 1 */
+    /* USER CODE BEGIN CAN1_MspDeInit 1 */
 
-  /* USER CODE END CAN1_MspDeInit 1 */
+    /* USER CODE END CAN1_MspDeInit 1 */
   }
 }
 
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */
-

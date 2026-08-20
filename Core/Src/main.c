@@ -57,7 +57,7 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-DJMotor DJ_Motor[USE_DJNUM];
+
 /* USER CODE END 0 */
 
 /**
@@ -93,20 +93,19 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   DJmotor_Init();
-  /* 1. 开启接收中断（FIFO0 有消息） */
-  HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
+//  /* 1. 开启接收中断（FIFO0 有消息） */
+//  HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
 
-  /* 2. 开启错误中断（总线关闭、错误警告、被动错误） */
-  HAL_CAN_ActivateNotification(&hcan1, CAN_IT_BUSOFF | CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE);
+//  /* 2. 开启错误中断（总线关闭、错误警告、被动错误） */
+//  HAL_CAN_ActivateNotification(&hcan1, CAN_IT_BUSOFF | CAN_IT_ERROR_WARNING | CAN_IT_ERROR_PASSIVE);
 
-  /* 3. 启动 CAN 外设 */
-  if (HAL_CAN_Start(&hcan1) != HAL_OK)
-  {
-    Error_Handler();
-  }
+//  /* 3. 启动 CAN 外设 */
+//  if (HAL_CAN_Start(&hcan1) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }这些一般不写在这里
 
-  /* 4. 启动 TIM2 定时器中断 */
-  HAL_TIM_Base_Start_IT(&htim2);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */

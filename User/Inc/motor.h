@@ -41,7 +41,7 @@ extern "C"
     {
         uint16_t PulsePerRound;   // 编码器每转脉冲数，必填 8192！
         float Gear_ratio;         // 外部机械减速比（如果电机直接带轮子，填 1.0f）
-        float Reduction_ratio;    // 电机自身减速比（必填，M3508是 36.0f，M2006是 1.0f）
+        float Reduction_ratio;    // 电机自身减速比（必填，M3508是 19.0f，M2006是 36.0f）
         uint32_t ParamID;         // CAN receive ID base
         int16_t CurrentLimit_raw; // 电流最大限制值
     } DJMotorParam;
@@ -76,7 +76,7 @@ extern "C"
                                              状态机会强制失能发 0 电流 */
     } DJMotor;
 
-    // 全局电机数组（定义在 main.c，这里只声明）
+    // 全局电机数组
     extern DJMotor DJ_Motor[USE_DJNUM];
 
     extern CAN_HandleTypeDef hcan1; // 声明 CubeMX 生成的 CAN 句柄

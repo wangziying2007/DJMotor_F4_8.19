@@ -1,5 +1,24 @@
 #include "motor.h"
 
+DJMotor DJ_Motor[USE_DJNUM];
+
+static inline float Clampf(float var,float limit)
+{
+    float ans;
+    if(var > limit) ans = limit;
+    else if(var<-limit) ans = -limit;
+    else ans = var;
+    return ans;
+}
+static inline int16_t Clamp16(int16_t var,int16_t limit)
+{
+    int16_t ans;
+    if(var > limit) ans = limit;
+    else if(var<-limit) ans = -limit;
+    else ans = var;
+    return ans;
+}
+
 void DJmotor_Init(void)
 {
     DJMotorParam dj2006_param;
@@ -171,7 +190,7 @@ void ChangeDataByte(uint8_t *byte1, uint8_t *byte2)
 
 void DJmotor_CurrentTransmit(DJMotor *motor)
 {
-    uint8_t tx_data[8] = {0};
+    static uint8_t tx_data[8] = {0};
     CAN_TxHeaderTypeDef tx_header = {0};
     uint8_t tag = 0;
 
@@ -198,7 +217,8 @@ void DJmotor_CurrentTransmit(DJMotor *motor)
     ChangeDataByte(&tx_data[tag], &tx_data[tag + 1U]);
 
     uint32_t mailbox;
-    HAL_CAN_AddTxMessage(DJmotor_GetCanHandle(), &tx_header, tx_data, &mailbox);
+    if (motor->ID == 4 || motor->ID == 8)
+        HAL_CAN_AddTxMessage(DJmotor_GetCanHandle(), &tx_header, tx_data, &mailbox);
 }
 
 // 辅助限幅函数
@@ -225,19 +245,19 @@ void DJMotor_Func(void)
 {
     for (uint32_t i = 0; i < USE_DJNUM; i++)
     {
-        DJMotor *motor = &DJ_Motor[0];
+        DJMotor *motor = &DJ_Motor[i];
 
-        /* 失联检测：超过 CONNECT_TIMEOUT 未收到反馈，强制失能刹车（发 0 电流） */
-        uint32_t connect_timeout = 100U; /* 100ms */
-        if (motor->MODE_Cur != DJ_Disable &&
-            ((uint32_t)(HAL_GetTick() - motor->lastRxTick) > connect_timeout))
-        {
-            motor->lastRxTick = HAL_GetTick(); /* 减速刹车期间避免每次循环都被判定打进失能分支 */
-            motor->rxLost = 1;
-            motor->valSet.current_raw = 0;
-            DJmotor_CurrentTransmit(motor);
-            continue;
-        }
+        // /* 失联检测：超过 CONNECT_TIMEOUT 未收到反馈，强制失能刹车（发 0 电流） */
+        // uint32_t connect_timeout = 100U; /* 100ms */
+        // if (motor->MODE_Cur != DJ_Disable &&
+        //     ((uint32_t)(HAL_GetTick() - motor->lastRxTick) > connect_timeout))
+        // {
+        //     motor->lastRxTick = HAL_GetTick(); /* 减速刹车期间避免每次循环都被判定打进失能分支 */
+        //     motor->rxLost = 1;
+        //     motor->valSet.current_raw = 0;
+        //     DJmotor_CurrentTransmit(motor);
+        //     continue;
+        // }
 
         // 如果电机失能
         if (motor->MODE_Cur == DJ_Disable)
@@ -251,23 +271,38 @@ void DJMotor_Func(void)
         if (motor->MODE_Cur == DJ_RPM)
         {
             // 1. 把目标速度乘以减速比，转化为电机轴本身的目标速度
-            float target_rpm = (float)motor->valSet.speed_rpm * motor->param.Gear_ratio * motor->param.Reduction_ratio;
+            // motor->velPID.SetVal = (float)motor->valSet.speed_rpm * motor->param.Gear_ratio *
+            //                       motor->param.Reduction_ratio;
 
             // 2. 如果开启了速度限幅，进行限制
-            if (motor->limit.RPMLimitFlag)
-            { // 注意：如果你没有定义 limit 结构体，这句可暂时注释
-                target_rpm = ClampPeak(target_rpm, motor->limit.SpeedRPMLimit);
-            }
+            // if (motor->limit.RPMLimitFlag)
+            //{
+            //     motor->velPID.SetVal = ClampPeak( motor->velPID.SetVal, motor->limit.SpeedRPMLimit);
+            //}
 
             // 3. 更新 PID 的输入和输出
-            motor->velPID.SetVal = target_rpm;
-            motor->velPID.CurVal = (float)motor->valNow.speed_rpm * motor->param.Gear_ratio * motor->param.Reduction_ratio;
+            // motor->velPID.CurVal = (float)motor->valNow.speed_rpm * motor->param.Gear_ratio * motor->param.Reduction_ratio;
 
             // 4. 调用 PID 计算增量
-            motor->valSet.current_raw += PID_Caculate(&motor->velPID);
+            // motor->valSet.current_raw += PID_Caculate(&motor->velPID);
 
             // 5. 电流限幅保护
-            motor->valSet.current_raw = (int16_t)ClampPeak(motor->valSet.current_raw, motor->param.CurrentLimit_raw);
+            // motor->valSet.current_raw = (int16_t)ClampPeak(motor->valSet.current_raw, motor->param.CurrentLimit_raw);
+
+            motor->velPID.SetVal = (float)motor->valSet.speed_rpm * motor->param.Gear_ratio *
+                                   motor->param.Reduction_ratio;
+            motor->velPID.CurVal = (float)motor->valNow.speed_rpm * motor->param.Gear_ratio *
+                                   motor->param.Reduction_ratio;
+
+            if (motor->limit.RPMLimitFlag)
+            {
+                motor->velPID.SetVal = Clampf(motor->velPID.SetVal, motor->limit.SpeedRPMLimit);
+            }
+
+            motor->valSet.current_raw += PID_Calculate(&motor->velPID);
+            // motor->valSet.current_raw = (int16_t)(motor->velPID.KP * err + motor->velPID.KI * motor->velPID.err[2]);
+            motor->valSet.current_raw = Clamp16(motor->valSet.current_raw, motor->param.CurrentLimit_raw);
+
         }
         else if (motor->MODE_Cur == DJ_Position)
         {
@@ -290,7 +325,7 @@ void DJMotor_Func(void)
 
             // === 内环：速度环（把位置环的输出，作为速度环的目标值） ===
             // 3. 位置环 PID 计算
-            motor->velPID.SetVal = PID_Caculate(&motor->posPID);
+            motor->velPID.SetVal = PID_Calculate(&motor->posPID);
             motor->velPID.CurVal = (float)motor->valNow.speed_rpm * motor->param.Gear_ratio * motor->param.Reduction_ratio;
 
             // 4. 如果开启了速度限幅（内环的限幅）
@@ -300,7 +335,7 @@ void DJMotor_Func(void)
             }
 
             // 5. 调用速度环 PID 计算增量电流
-            motor->valSet.current_raw += PID_Caculate(&motor->velPID);
+            motor->valSet.current_raw += PID_Calculate(&motor->velPID);
 
             // 6. 最终限幅输出电流
             motor->valSet.current_raw = (int16_t)ClampPeak(motor->valSet.current_raw, motor->param.CurrentLimit_raw);

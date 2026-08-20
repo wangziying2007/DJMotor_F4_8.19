@@ -39,8 +39,8 @@ extern "C" {
 #define USE_DJNUM 8        //用到的电机数量
 #define M2006_NUM 1        //M2006 电机数量（占前 M2006_NUM 个 ID）
 #define M3508_NUM 7        //M3508 电机数量（总数量 = USE_DJNUM）
-#define M2006_RATIO 1.0f   //M2006 减速比（内部电机轴比值）
-#define M3508_RATIO 36.0f  //M3508 减速比（3591/100≈36.0）
+#define M2006_RATIO 36.0f   //M2006 减速比
+#define M3508_RATIO 19.2032085f  //M3508 减速比
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
