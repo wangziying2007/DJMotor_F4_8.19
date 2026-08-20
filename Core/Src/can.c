@@ -55,6 +55,23 @@ void MX_CAN1_Init(void)
   }
   /* USER CODE BEGIN CAN1_Init 2 */
 
+  /* 配置 CAN1 接收过滤器：放行 DJI 电机反馈帧（标准帧 ID 0x200~0x208）
+     F4 上若不使能过滤器，CAN 默认是收不到任何消息的 */
+  CAN_FilterTypeDef sFilterConfig = {0};
+  sFilterConfig.FilterIdHigh      = (uint32_t)(0x200U << 5);  /* 标准帧 ID 需左移 5 位到 [28:18] 位 */
+  sFilterConfig.FilterIdLow       = 0x0000U;
+  sFilterConfig.FilterMaskIdHigh  = (uint32_t)(0x7FFU << 5);  /* 掩码全部匹配，放行 0x200 起始的 11 位 ID */
+  sFilterConfig.FilterMaskIdLow   = 0x0000U;
+  sFilterConfig.FilterMode        = CAN_FILTERMODE_IDMASK;   /* 掩码模式 */
+  sFilterConfig.FilterScale       = CAN_FILTERSCALE_32BIT;   /* 32 位单过滤器 */
+  sFilterConfig.FilterFIFOAssignment = CAN_FILTER_FIFO0;     /* 分配到 FIFO0，对应接收中断 */
+  sFilterConfig.FilterBank        = 0U;                      /* 使用 FilterBank 0 */
+  sFilterConfig.FilterActivation  = CAN_FILTER_ENABLE;
+  if (HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
   /* USER CODE END CAN1_Init 2 */
 
 }

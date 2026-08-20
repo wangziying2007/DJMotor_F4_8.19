@@ -8,6 +8,7 @@ extern "C"
 
 #include "pid.h"
 #include "main.h"
+#include <stdbool.h> /* 提供 bool / true / false */
 
 // 辅助宏：绝对值、符号函数（用于编码器绕圈补偿）
 #define ABS(x) (((x) < 0) ? -(x) : (x))                   // 取绝对值
@@ -16,11 +17,13 @@ extern "C"
     // 电机模式枚举
     typedef enum
     {
-        DJ_Disable = 0,  // 失能，发 0 电流
-        DJ_RPM = 1,      // 速度模式
-        DJ_Position = 2, // 位置模式
-    } DJMotor_mode_t;
+        DJ_Disable = 0,  /* 关：transmit 0 current */
+        DJ_RPM = 1,      /* 速度 mode */
+        DJ_Position = 2, /* 位置 mode */
+        DJ_Zero = 3,     /* 寻零 mode */
+        DJ_Current = 4,  /* 电流/扭矩 */
 
+    } DJMotor_mode_t;
     // 反馈及设定值结构体
     typedef struct
     {
@@ -39,6 +42,7 @@ extern "C"
         uint16_t PulsePerRound;   // 编码器每转脉冲数，必填 8192！
         float Gear_ratio;         // 外部机械减速比（如果电机直接带轮子，填 1.0f）
         float Reduction_ratio;    // 电机自身减速比（必填，M3508是 36.0f，M2006是 1.0f）
+        uint32_t ParamID;         // CAN receive ID base
         int16_t CurrentLimit_raw; // 电流最大限制值
     } DJMotorParam;
 
@@ -57,8 +61,8 @@ extern "C"
     // 电机本体结构体
     typedef struct
     {
+        volatile bool Begin;    // true 运行 MODE;false 失能
         uint8_t ID;                       // 电机 ID (1~8)
-        volatile bool Begin;              // True运行，False失能
         volatile DJMotor_mode_t MODE_Cur; // 当前运行模式
         DJMotorVal valSet;                // 设定值
         DJMotorVal valNow;                // 当前实际值
@@ -74,16 +78,16 @@ extern "C"
 
     // 全局电机数组（定义在 main.c，这里只声明）
     extern DJMotor DJ_Motor[USE_DJNUM];
-    extern CAN_HandleTypeDef hfdcan2; // 声明 CubeMX 生成的 CAN 句柄
+
+    extern CAN_HandleTypeDef hcan1; // 声明 CubeMX 生成的 CAN 句柄
 
     CAN_HandleTypeDef *DJmotor_GetCanHandle(void); // 获取 CAN 句柄（实现放 motor.c）
 
-    void DJmotor_AngleCalculate(DJMotor *motor);                          // 计算脉冲与角度
+    void DJmotor_AngleCalculate(DJMotor *motor);                            // 计算脉冲与角度
     void DJMotor_Receive(CAN_RxHeaderTypeDef Rxheader, uint8_t *Rx_data); // 接收解析函数
-    void DJmotor_CurrentTransmit(DJMotor *motor);                         // 封包发送函数
-    void EncodeS16Data(int16_t *src, uint8_t *dst);                       // 把 16 位有符号数拆成 2 个字节放进数组
-    void ChangeDataByte(uint8_t *byte1, uint8_t *byte2);                  // 交换大端小端字节序
-    void DJMotor_Func(void);                                              // 状态机主体（每1ms调用一次）
+    void DJmotor_CurrentTransmit(DJMotor *motor);                           // 封包发送函数
+    void DJmotor_Init(void);                                                // 初始化电机
+    void DJMotor_Func(void);                                                // 状态机主体（每1ms调用一次）
 
 #ifdef __cplusplus
 }

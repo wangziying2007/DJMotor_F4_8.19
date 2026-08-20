@@ -1,9 +1,94 @@
 #include "motor.h"
 
-//获取CAN句柄
-FDCAN_HandleTypeDef *DJmotor_GetCanHandle(void)
+void DJmotor_Init(void)
 {
-    return &hfdcan2;// 以后如果换 CAN 接口，只需要改这一行，隔离底层硬件依赖
+    DJMotorParam dj2006_param;
+    DJMotorParam dj3508_param;
+    DJMotorLimit limit;
+
+    /* M2006 电机档案（DJMotorParam 全字段）*/
+    dj2006_param.ParamID = 0x1ffU;
+    dj2006_param.Gear_ratio = 1.0f;
+    dj2006_param.Reduction_ratio = M2006_RATIO;
+    dj2006_param.PulsePerRound = 8191U;
+    dj2006_param.CurrentLimit_raw = 4500;
+
+    /* M3508 电机档案（DJMotorParam 全字段）*/
+    dj3508_param.ParamID = 0x200U;
+    dj3508_param.Gear_ratio = 1.0f;
+    dj3508_param.Reduction_ratio = M3508_RATIO;
+    dj3508_param.PulsePerRound = 8191U;
+    dj3508_param.CurrentLimit_raw = 10000;
+
+    /* 默认限幅参数（DJMotorLimit 全字段）*/
+    limit.RPMLimitFlag = 0U;
+    limit.SpeedRPMLimit = 10000.0f;
+    limit.PosAngleLimitFlag = 0U;
+    limit.MinAngle_deq = 0.0f;
+    limit.MaxAngle_deq = 360.0f;
+    limit.PosRPMFlag = 1U;
+    limit.PosRPMLimit = 8000.0f;
+
+    for (uint32_t i = 0; i < USE_DJNUM; i++)
+    {
+        DJMotor *motor = &DJ_Motor[i];
+
+        /* DJMotor 基础字段 */
+        motor->ID = (uint8_t)(i + 1U);
+        motor->MODE_Cur = DJ_Disable; /* 上电失能:发 0 电流 */
+        motor->param = dj3508_param;  /* 先给默认档案，下面按型号覆盖 */
+        motor->limit = limit;
+        motor->lastRxTick = HAL_GetTick();
+        motor->rxLost = 0U;
+
+        /* DJMotorVal 全字段初始化：设定值 / 当前值 / 上一次值 全部清零 */
+        motor->valSet.current_raw = 0;
+        motor->valSet.speed_rpm = 0;
+        motor->valSet.PulseRead = 0;
+        motor->valSet.PulseGap = 0;
+        motor->valSet.PulseTotal = 0;
+        motor->valSet.angle_deg = 0.0f;
+        motor->valSet.current_A = 0.0f;
+        motor->valSet.temperature_C = 0;
+
+        motor->valNow = motor->valSet;
+        motor->valPre = motor->valSet;
+
+        /* PIDType 全字段初始化：位置环（位置式）*/
+        PID_Reset(&motor->posPID);
+        motor->posPID.KP = 0.07f;
+        motor->posPID.KI = 0.0005f;
+        motor->posPID.KD = 0.0f;
+        motor->posPID.mode = PIDPOS;
+        motor->posPID.intgral = 0.0f;
+
+        /* PIDType 全字段初始化：速度环（增量式）*/
+        PID_Reset(&motor->velPID);
+        motor->velPID.KP = 5.5f;
+        motor->velPID.KI = 0.3f;
+        motor->velPID.KD = 0.01f;
+        motor->velPID.mode = PIDINC;
+        motor->velPID.intgral = 0.0f;
+    }
+
+    /* 按型号覆写对应电机的物理档案（M2006 在前，M3508 在后）*/
+    for (uint32_t i = 0; i < M2006_NUM && i < USE_DJNUM; i++)
+    {
+        DJ_Motor[i].ID = (uint8_t)(i + 1U);
+        DJ_Motor[i].param = dj2006_param;
+    }
+
+    for (uint32_t i = 0; i < M3508_NUM && (i + M2006_NUM) < USE_DJNUM; i++)
+    {
+        DJ_Motor[i + M2006_NUM].ID = (uint8_t)(i + M2006_NUM + 1U);
+        DJ_Motor[i + M2006_NUM].param = dj3508_param;
+    }
+}
+
+// 获取CAN句柄
+CAN_HandleTypeDef *DJmotor_GetCanHandle(void)
+{
+    return &hcan1; // 以后如果换 CAN 接口，只需要改这一行，隔离底层硬件依赖
 }
 
 void DJmotor_AngleCalculate(DJMotor *motor)
@@ -30,14 +115,15 @@ void DJmotor_AngleCalculate(DJMotor *motor)
 
 void DJMotor_Receive(CAN_RxHeaderTypeDef Rxheader, uint8_t *Rx_data)
 {
-    if ((Rxheader.IdType != CAN_STANDARD_ID) ||
-        (Rxheader.RxFrameType != CAN_DATA_FRAME) ||
-        (Rxheader.Identifier < 0x201U) || (Rxheader.Identifier > 0x208U))
+    if ((Rxheader.IDE != CAN_ID_STD) ||
+        (Rxheader.RTR != CAN_RTR_DATA) ||
+        (Rxheader.StdId < 0x201U) ||
+        (Rxheader.StdId > 0x208U))
     {
         return;
     }
 
-    uint8_t card_id = (uint8_t)(Rxheader.Identifier - 0x200U); /* 1..8 */
+    uint8_t card_id = (uint8_t)(Rxheader.StdId - 0x200U); /* 1..8 */
 
     /* Init 保证 ID = 索引 + 1, 直接索引免循环查找 */
     if (card_id > USE_DJNUM)
@@ -51,12 +137,12 @@ void DJMotor_Receive(CAN_RxHeaderTypeDef Rxheader, uint8_t *Rx_data)
     motor->valNow.speed_rpm = (int16_t)(((uint16_t)Rx_data[2] << 8) | Rx_data[3]);
     motor->valNow.current_raw = (int16_t)(((uint16_t)Rx_data[4] << 8) | Rx_data[5]);
 
-    if (motor->param.Reduction_ratio == M3508_RATIO)              // C620 电调
+    if (motor->param.Reduction_ratio == M3508_RATIO) // C620 电调
     {
         motor->valNow.temperature_C = (int8_t)Rx_data[6];
         motor->valNow.current_A = (float)motor->valNow.current_raw * 0.0012207f;
     }
-    else                                                          // C610 电调
+    else // C610 电调
     {
         motor->valNow.current_A = (float)motor->valNow.current_raw / 10000.0f * 10.0f;
     }
@@ -90,24 +176,19 @@ void DJmotor_CurrentTransmit(DJMotor *motor)
     uint8_t tag = 0;
 
     /* 电流限幅由各模式函数负责，此处只打包发送 */
-    tx_header.IdType = CAN_STANDARD_ID;
-    tx_header.TxFrameType = CAN_DATA_FRAME;
-    tx_header.DataLength = CAN_DLC_BYTES_8;
-    tx_header.ErrorStateIndicator = CAN_ESI_ACTIVE;
-    tx_header.BitRateSwitch = CAN_BRS_OFF;
-    tx_header.FDFormat = CAN_CLASSIC_CAN;
-    tx_header.TxEventFifoControl = CAN_NO_TX_EVENTS;
-    tx_header.MessageMarker = 0;
+    tx_header.IDE = CAN_ID_STD;   // 标准帧
+    tx_header.RTR = CAN_RTR_DATA; // 数据帧
+    tx_header.DLC = 8;            // 8字节数据长度
 
     /* 编号 1~4 -> 0x200 帧，5~8 -> 0x1FF 帧；每个电机占 2 字节 */
     if (motor->ID <= 4U)
     {
-        tx_header.Identifier = 0x200U;
+        tx_header.StdId = 0x200U;
         tag = (uint8_t)((motor->ID - 1U) * 2U);
     }
     else
     {
-        tx_header.Identifier = 0x1FFU;
+        tx_header.StdId = 0x1FFU;
         tag = (uint8_t)((motor->ID - 5U) * 2U);
     }
 
@@ -116,7 +197,8 @@ void DJmotor_CurrentTransmit(DJMotor *motor)
     EncodeS16Data(&motor->valSet.current_raw, &tx_data[tag]);
     ChangeDataByte(&tx_data[tag], &tx_data[tag + 1U]);
 
-    HAL_CAN_AddMessageToTxFifoQ(DJmotor_GetCanHandle(), &tx_header, tx_data);
+    uint32_t mailbox;
+    HAL_CAN_AddTxMessage(DJmotor_GetCanHandle(), &tx_header, tx_data, &mailbox);
 }
 
 // 辅助限幅函数
@@ -146,7 +228,7 @@ void DJMotor_Func(void)
         DJMotor *motor = &DJ_Motor[0];
 
         /* 失联检测：超过 CONNECT_TIMEOUT 未收到反馈，强制失能刹车（发 0 电流） */
-        uint32_t connect_timeout = 100U;  /* 100ms */
+        uint32_t connect_timeout = 100U; /* 100ms */
         if (motor->MODE_Cur != DJ_Disable &&
             ((uint32_t)(HAL_GetTick() - motor->lastRxTick) > connect_timeout))
         {
