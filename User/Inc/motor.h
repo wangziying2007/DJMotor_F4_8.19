@@ -10,6 +10,14 @@ extern "C"
 #include "main.h"
 #include <stdbool.h> /* 提供 bool / true / false */
 
+#define USE_DJNUM 8             // 用到的电机数量
+#define M2006_NUM 1             // M2006 电机数量（占前 M2006_NUM 个 ID）
+#define M3508_NUM 7             // M3508 电机数量（总数量 = USE_DJNUM）
+#define M2006_RATIO 36.0f       // M2006 减速比
+#define M3508_RATIO 19.2032085f // M3508 减速比
+
+#define Zero_Distance 10
+
 // 辅助宏：绝对值、符号函数（用于编码器绕圈补偿）
 #define ABS(x) (((x) < 0) ? -(x) : (x))                   // 取绝对值
 #define GetSign(x) (((x) < 0) ? (-1) : ((x) > 0 ? 1 : 0)) // 取正负号
@@ -52,16 +60,30 @@ extern "C"
         uint8_t RPMLimitFlag;      // 是否启用速度限幅
         float SpeedRPMLimit;       // 速度上限
         uint8_t PosAngleLimitFlag; // 是否启用位置（角度）限幅
-        float MinAngle_deq;        // 最小角度
-        float MaxAngle_deq;        // 最大角度
+        float MinAngle_deg;        // 最小角度
+        float MaxAngle_deg;        // 最大角度
         uint8_t PosRPMFlag;        // 位置模式内环速度限幅开关
         float PosRPMLimit;         // 位置模式内环速度上限
     } DJMotorLimit;
 
+    typedef struct
+    {
+        bool IsSetZero;
+        bool Overtimeflag;
+        bool StuckFlag;
+        bool ZeroFlag;
+    } DJmotorStatus;
+
+    typedef struct
+    {
+        int32_t lastRxTime;
+        int16_t stuckCount, timeoutCount;
+    } DJmotorError;
+
     // 电机本体结构体
     typedef struct
     {
-        volatile bool Begin;    // true 运行 MODE;false 失能
+        volatile bool Begin;              // true 运行 MODE;false 失能
         uint8_t ID;                       // 电机 ID (1~8)
         volatile DJMotor_mode_t MODE_Cur; // 当前运行模式
         DJMotorVal valSet;                // 设定值
@@ -83,11 +105,11 @@ extern "C"
 
     CAN_HandleTypeDef *DJmotor_GetCanHandle(void); // 获取 CAN 句柄（实现放 motor.c）
 
-    void DJmotor_AngleCalculate(DJMotor *motor);                            // 计算脉冲与角度
+    void DJmotor_AngleCalculate(DJMotor *motor);                          // 计算脉冲与角度
     void DJMotor_Receive(CAN_RxHeaderTypeDef Rxheader, uint8_t *Rx_data); // 接收解析函数
-    void DJmotor_CurrentTransmit(DJMotor *motor);                           // 封包发送函数
-    void DJmotor_Init(void);                                                // 初始化电机
-    void DJMotor_Func(void);                                                // 状态机主体（每1ms调用一次）
+    void DJmotor_CurrentTransmit(DJMotor *motor);                         // 封包发送函数
+    void DJmotor_Init(void);                                              // 初始化电机
+    void DJMotor_Func(void);                                              // 状态机主体（每1ms调用一次）
 
 #ifdef __cplusplus
 }
