@@ -238,7 +238,7 @@ void DJmotor_CurrentTransmit(DJMotor *motor)
     }
 
     /* C620/C610 电流帧字节序为 [电流低8位, 电流高8位]。
-       EncodeS16Data 先按 [高,低] 写入，ChangeDataByte 再翻成 [低,高]，最终正确。 */
+       EncodeS16Data 先按 [高,低] 写入，ChangeDataByte 再翻成 [低,高]，最终正确。 （写这个一定要看电调的手册，一开始写反了）*/
     EncodeS16Data(&motor->valSet.current_raw, &tx_data[tag]);
     ChangeDataByte(&tx_data[tag], &tx_data[tag + 1U]);
 
